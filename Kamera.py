@@ -31,7 +31,8 @@ output_folder = camera_path + r"\Plots"
 #%% 
 
 def read_temp_csv(file_path, dimentions):
-    
+
+    first_rows = []
     first_rows_list = []
     data_matrices = []
     
@@ -49,8 +50,7 @@ def read_temp_csv(file_path, dimentions):
         while True:
             try:
                 # Read the first row and add it to the first_rows_list as a numpy array
-                first_row = np.array([str(x) for x in next(reader) if x])  # Convert elements to float
-                first_rows_list.append(first_row)
+                first_rows_list.append(next(reader))
                 
                 # Read the next 46 rows and store them in a matrix
                 data_matrix = []
@@ -74,6 +74,12 @@ def read_temp_csv(file_path, dimentions):
         data_matrices = np.array(data_matrices)
         matrix = data_matrices[:len(data_matrices), :dim[0], :dim[1]] #Remove the last empty column
         matrix_plot = matrix.astype(float) #Transform from string to float
+
+        #Clean the time data, and remove the date
+        for values in first_rows:
+            v = values[0]
+            time = v[16:]
+            first_rows_list.append(time)
         
         return np.array(first_rows_list, dtype=object), matrix_plot
 
@@ -83,7 +89,7 @@ first_rows, full_data_matrix = read_temp_csv(surface_path, dim)
 
 #%%
 
-def plot_temp_matrix(data, output_folder_save):
+def plot_temp_matrix(data, output_folder_save, time_values):
     
     rocket = sns.color_palette("rocket", as_cmap=True)
     
@@ -97,12 +103,12 @@ def plot_temp_matrix(data, output_folder_save):
         cax = ax.matshow(data[i], cmap=rocket)  # Use colormap
         
         plt.colorbar(mpl.cm.ScalarMappable(norm= norm, cmap = rocket), ax = ax)
-        plt.title(str(first_rows[i]))
+        plt.title(str(time_values[i]))
         plt.savefig(str(output_folder_save + "\\matrix_"+str(i)+".png"))    
         plt.close()
         i +=1
         
 #%% Test plot function 
 
-plot_temp_matrix(full_data_matrix, output_folder)
+plot_temp_matrix(full_data_matrix, output_folder, time)
 
