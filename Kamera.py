@@ -20,7 +20,6 @@ import os
 from os import listdir
 from itertools import islice
 
-
 def get_filenames(string):
     """
     Fetch all file names of csv files in current directory containing choosen "string".
@@ -28,7 +27,8 @@ def get_filenames(string):
     Return a list of file names. Might not be sorted!
     """
     files = os.listdir()
-    files = [name for name in files if string and ".csv" in name]
+    files = [name for name in files if ".csv" in name]
+    files = [name for name in files if string in name]
     
     return files
 
@@ -101,10 +101,160 @@ def read_temp_csv(file_path):
         except StopIteration:
             pass
         
-    return first_rows_list, np.array(data_matrices)
+        
+        
+        matrix = np.array(data_matrices)
+        matrix = matrix[:,:,:-1]
+        
+        
+    return first_rows_list, matrix #removes the extra coloumn with na values)
 
+def bin_frames_and_extract_temperatures(data, frames_per_bin, threshold):
+    total_frames, height, width = data.shape
+    number_of_bins = total_frames // frames_per_bin
+    reshaped_data = data[:number_of_bins * frames_per_bin].reshape(number_of_bins, frames_per_bin, height, width)
+    mean_temperatures = np.mean(reshaped_data, axis=1)
+
+    temperatures_over_threshold = []
+
+    for i in range(number_of_bins):
+        temps_over_threshold = mean_temperatures[i][mean_temperatures[i] > threshold]
+        temperatures_over_threshold.append(temps_over_threshold)
+
+    return temperatures_over_threshold, mean_temperatures
+
+def plot_temperature_boxplots(temperatures_over_threshold, mean_temperatures, time_values):
+    '''
+    List of time values given as strings in HH:MM:SS.sss format
+    '''
+    
+    # Convert time strings to datetime objects
+    times = pd.to_datetime(time_values, format='%H:%M:%S.%f')
+
+    # Calculate duration in minutes
+    duration_seconds = (times[-1] - times[0]).total_seconds()
+    duration_minutes = duration_seconds / 60
+    
+    # Calculate the duration for each bin in minutes
+    bins_count = len(temperatures_over_threshold)
+    bin_duration_minutes = duration_minutes / bins_count
+    
+    # Generate the time intervals as floats for plotting
+    time_intervals_minutes = np.arange(bins_count) * bin_duration_minutes
+
+    # Calculate delta temperature change (from first to last mean temperature)
+    first_temp = np.mean(mean_temperatures[0])
+    last_temp = np.mean(mean_temperatures[-1])
+    delta_temp = last_temp - first_temp
+    
+    # Plot the boxplots with scaled time intervals in minutes
+    plt.figure(figsize=(12, 6))
+    plt.boxplot(temperatures_over_threshold, positions=time_intervals_minutes, widths=bin_duration_minutes / 2)
+    plt.xticks(ticks=time_intervals_minutes, labels=[f'{t:.2f} min' for t in time_intervals_minutes], rotation=45)
+    plt.xlabel('Duration (minutes)')
+    plt.ylabel('Temperature (°C)')
+    plt.title(f'Temperature Values Above Threshold Over Time\nDelta Temperature: {delta_temp:.2f} °C')
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.tight_layout()
+    plt.show()
+    
+
+def plot_multiple_temperature_boxplots(temperature_data_list, time_values, frames_per_bin, threshold):
+    times = pd.to_datetime(time_values, format='%H:%M:%S.%f')
+    duration_seconds = (times[-1] - times[0]).total_seconds()
+    duration_minutes = duration_seconds / 60
+    
+    bins_count = min(data.shape[0] // frames_per_bin for data in temperature_data_list)
+    bin_duration_minutes = duration_minutes / bins_count
+    time_intervals_minutes = np.arange(bins_count) * bin_duration_minutes
+
+    plt.figure(figsize=(12, 6))
+
+    colors = ['b', 'g', 'r', 'c', 'm', 'y']
+
+    for i, temperature_data in enumerate(temperature_data_list):
+        temperatures_over_threshold, mean_temperatures = bin_frames_and_extract_temperatures(temperature_data, frames_per_bin, threshold)
+        
+        # Calculate delta temperature change for each dataset
+        first_temp = np.mean(mean_temperatures[0])
+        last_temp = np.mean(mean_temperatures[-1])
+        delta_temp = last_temp - first_temp
+
+        # Plot each dataset's boxplots
+        plt.boxplot(temperatures_over_threshold, positions=time_intervals_minutes,
+                    widths=bin_duration_minutes / 2, patch_artist=True,
+                    boxprops=dict(facecolor=colors[i % len(colors)]),
+                    label=f'Dataset {i+1} - Delta Temp: {delta_temp:.2f} °C')
+
+    plt.xticks(ticks=time_intervals_minutes, labels=[f'{t:.2f} min' for t in time_intervals_minutes], rotation=45)
+    plt.xlabel('Duration (minutes)')
+    plt.ylabel('Temperature (°C)')
+    plt.title('Temperature Values Above Threshold Over Time')
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+def plot_multiple_temperature_boxplots(filenames, frames_per_bin, threshold):
+    temperature_data_list = []
+    all_time_values = []
+
+    for filename in filenames:
+        time_values, temperature_data = read_temp_csv(filename)
+        temperature_data_list.append(temperature_data)
+        all_time_values.append(time_values)
+
+    # Assume the first file for duration calculation and time values usage
+    times = pd.to_datetime(all_time_values[0], format='%H:%M:%S.%f')
+    duration_seconds = (times[-1] - times[0]).total_seconds()
+    duration_minutes = duration_seconds / 60
+    
+    bins_count = min(data.shape[0] // frames_per_bin for data in temperature_data_list)
+    bin_duration_minutes = duration_minutes / bins_count
+    time_intervals_minutes = np.arange(bins_count) * bin_duration_minutes
+
+    plt.figure(figsize=(12, 6))
+
+    colors = ['b', 'g', 'r', 'c', 'm', 'y']
+
+    for i, temperature_data in enumerate(temperature_data_list):
+        temperatures_over_threshold, mean_temperatures = bin_frames_and_extract_temperatures(temperature_data, frames_per_bin, threshold)
+        
+        # Calculate delta temperature change for each dataset
+        first_temp = np.mean(mean_temperatures[0])
+        last_temp = np.mean(mean_temperatures[-1])
+        delta_temp = last_temp - first_temp
+
+        # Plot each dataset's boxplots
+        plt.boxplot(temperatures_over_threshold, positions=time_intervals_minutes,
+                    widths=bin_duration_minutes / 2, patch_artist=True,
+                    boxprops=dict(facecolor=colors[i % len(colors)]),
+                    label=f'Dataset {i+1} - Delta Temp: {delta_temp:.2f} °C')
+
+    plt.xticks(ticks=time_intervals_minutes, labels=[f'{t:.2f} min' for t in time_intervals_minutes], rotation=45)
+    plt.xlabel('Duration (minutes)')
+    plt.ylabel('Temperature (°C)')
+    plt.title('Temperature Values Above Threshold Over Time')
+    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
 
 #### 
+
+def bin_frames_and_compute_mean(data, frames_per_bin):
+    total_frames, height, width = data.shape
+    
+    # Calculate the number of complete bins we can form
+    number_of_bins = total_frames // frames_per_bin
+    
+    # Reshape the data to shape (number_of_bins, frames_per_bin, height, width)
+    reshaped_data = data[:number_of_bins * frames_per_bin].reshape(number_of_bins, frames_per_bin, height, width)
+    
+    # Compute the mean across the specified axis (the frame axis after reshaping)
+    mean_temperatures = np.mean(reshaped_data, axis=1)
+    
+    return mean_temperatures
 
 def get_max_values(matrix):
     """
@@ -120,6 +270,22 @@ def get_max_values(matrix):
     
     return max_values
 
+def get_pup_values(matrix, cutoff):
+    
+    
+    pup_values = []
+    
+    i = 0
+    for frames in matrix:
+        liste = []
+        for rows in frames:
+            for values in rows:
+                if values > cutoff:
+                    liste.append(values)
+        pup_values.append(liste)
+        i += 1
+    return pup_values
+    
 
 def format_time (time_vector):
     """
