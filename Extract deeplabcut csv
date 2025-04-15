@@ -1,0 +1,68 @@
+import pandas as pd
+import numpy as np
+
+path = r'C:\Users\Ane\OneDrive - Universitetet i Oslo\Documents\Boccara_Master\Programmering Lab\sol_dlc.csv'
+
+#%%
+
+def read_save_deeplabcut(path):
+    # Load the CSV file with proper header handling
+    df = pd.read_csv(path, header=[1, 2])  # Use multi-index for bodyparts and coords
+    
+    # Extract unique body parts
+    body_parts = df.columns.levels[0]
+    
+    # Initialize a dictionary to store coordinates
+    coordinates = {}
+    
+    for part in body_parts:
+        if part != 'bodyparts':  # Avoid metadata columns
+            x_values = df[(part, 'x')].values
+            y_values = df[(part, 'y')].values
+            coordinates[part] = np.column_stack((x_values, y_values))
+    
+    # Convert dictionary to a structured NumPy array
+    matrix = np.array([coordinates[part] for part in body_parts if part != 'bodyparts'])
+
+    return(coordinates, matrix)
+
+#%% Extract temp values 
+
+def extract_temp(temperature_data, coordinates):
+    # Extract one temperature value per second per body part
+    temperature_values = {}
+    num_frames, height, width = temperature_data.shape
+    
+    for part, coords in coordinates.items():
+        temp_values = []
+        for frame in range(num_frames):
+            x, y = coords[frame]  # Get the coordinate for this second
+            if not np.isnan(x) and not np.isnan(y):
+                xi, yi = int(x), int(y)
+                if 0 <= yi < height and 0 <= xi < width:
+                    temp_values.append(temperature_data[frame, yi, xi])
+                else:
+                    temp_values.append(np.nan)  # Append NaN if out of bounds
+            else:
+                temp_values.append(np.nan)  # Append NaN for missing coordinates
+        temperature_values[part] = np.array(temp_values)
+        
+    return(temperature_values)
+
+
+#%%
+
+# Define dimensions for the random temperature matrix
+num_frames = 100  # Number of time frames (seconds)
+height = 2000  # Height of the temperature matrix (pixels)
+width = 2000  # Width of the temperature matrix (pixels)
+
+# Generate a random temperature matrix with values between 20 and 40 degrees Celsius
+temperature_matrix = np.random.uniform(20, 40, (num_frames, height, width))
+
+#%% Get data
+
+dlc_coord, dlc_matrix = read_save_deeplabcut(path)   #Coordinates in dict, coordinates in matrix
+
+data = extract_temp(temperature_matrix, dlc_coord)  #Extract data from temp matrix
+
